@@ -38,6 +38,22 @@ case "$MODE" in
     echo "▶ escrow contract tests…"
     exec forge test --root contracts -vv
     ;;
+  desktop)
+    need forge; need node; need anvil
+    echo "▶ building contracts…"; forge build --root contracts >/dev/null
+    echo "▶ starting local chain (anvil)…"
+    pkill -9 -f anvil 2>/dev/null || true
+    anvil --silent > /tmp/terrace-anvil.log 2>&1 &
+    ANVIL_PID=$!
+    trap 'kill -9 $ANVIL_PID 2>/dev/null || true' EXIT
+    wait_for_port 127.0.0.1 8545 30
+    if [ ! -d desktop/node_modules/electron ]; then
+      echo "▶ installing Electron (first run)…"; ( cd desktop && npm install )
+    fi
+    echo "▶ launching the Terrace desktop app… (open a SECOND window with ./start.sh desktop to test two peers)"
+    export TERRACE_NODE="$(command -v node)"
+    ( cd desktop && npm start )
+    ;;
   assemble)
     need forge; need node; need anvil
     echo "▶ building contracts…"
@@ -54,6 +70,6 @@ case "$MODE" in
     node scripts/assemble-e2e.mjs
     ;;
   *)
-    echo "usage: ./start.sh [assemble|room|contracts]"; exit 1
+    echo "usage: ./start.sh [assemble|desktop|room|contracts]"; exit 1
     ;;
 esac
