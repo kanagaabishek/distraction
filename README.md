@@ -153,8 +153,49 @@ to their WDK address from `wallet:info`. USDt (Sepolia): `0xd077a400968890eacc75
 Gasless (ERC-4337 / Pimlico) is a noted follow-up, intentionally deferred so it doesn't
 block this checkpoint.
 
+## Phase 2b — staking wired into the P2P room
+
+The two proven layers joined: a stake is a genuine **Autobase multi-writer event** in the
+same shared log as predictions/chat/scoreboard, and it references the on-chain deposit.
+
+### Flow (ordering, as designed)
+
+1. Locking a prediction emits a **pending** stake into Autobase immediately — every peer
+   sees it without waiting on the chain.
+2. The WDK account does the on-chain `approve` + `deposit` (self-custody signing).
+3. On the deposit receipt, the stake flips to **confirmed** (referencing the real tx hash).
+4. Reporter reports the outcome on-chain; the room **mirrors** the result.
+5. The winner claims on-chain; the room records the claim + payout.
+
+The **contract stays the source of truth.** The room state mirrors/references it; a
+`reconcile()` step reads `escrow.stakeOf` + `matches` and asserts they agree (contract wins
+on any disagreement — surfaced, not hidden).
+
+Shared state per player (`room.getState().stakes[address]`): `prediction`, `amount`,
+`status` (pending→confirmed), `won`, and `claim` (txHash + payout).
+
+| File | Role |
+|---|---|
+| `lib/room.js` | +additive stake/result/claim event methods + getState folding. Phase 1 behavior unchanged. |
+| `lib/stake-bridge.mjs` | The seam: room events ⇄ WDK-signed on-chain deposit/report/claim + reconcile. |
+| `scripts/stake-flow-e2e.mjs` | Two room peers + two WDK accounts; full stake→report→claim on local anvil. |
+
+### Verify 2b
+
+```sh
+anvil &                    # or backgrounded
+npm run stake:e2e          # prints both peers' views; ends with PASS
+```
+
+What it proves: peerA stakes AWAY, peerB stakes HOME; **both peers see both stakes** go
+pending→confirmed; reporter reports HOME; peerB (winner) claims the 200 USDt pool; both
+peers **converge to identical state**; and room state **reconciles AGREE** with the escrow.
+
+Discovery for the two in-process peers uses a local DHT testnet (`@hyperswarm/testnet`) so
+it's deterministic. Pure-P2P two-process sync stays covered by `npm run room:test`.
+
 ## Not yet built (later phases — do not assume present)
 
-- Phase 2b: wire staking into the room (a stake becomes an Autobase event; payout status in shared state).
 - Phase 3: QVAC on-device chat translation.
 - A desktop GUI shell around `lib/room.js`.
+- Live-Sepolia run of the full staking flow (needs faucet-funded wallets; local anvil is the autonomous proof).
