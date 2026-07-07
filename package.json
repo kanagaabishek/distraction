@@ -11,10 +11,14 @@
     "wallet:info": "node scripts/wallet-info.mjs",
     "escrow:e2e": "node scripts/escrow-local-e2e.mjs",
     "stake:e2e": "node scripts/stake-flow-e2e.mjs",
+    "translate:demo": "node scripts/translate-demo.mjs",
+    "assemble": "node scripts/assemble-e2e.mjs",
     "contracts:test": "forge test --root contracts -vv",
     "room:test": "bash scripts/two-peer-test.sh"
   },
   "dependencies": {
+    "@qvac/sdk": "^0.14.1",
+    "@qvac/translation-nmtcpp": "^6.3.1",
     "@tetherto/wdk": "^1.0.0-beta.13",
     "@tetherto/wdk-wallet-evm": "^1.0.0-beta.15",
     "autobase": "^7.9.0",
