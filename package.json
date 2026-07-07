@@ -10,6 +10,7 @@
   "scripts": {
     "wallet:info": "node scripts/wallet-info.mjs",
     "escrow:e2e": "node scripts/escrow-local-e2e.mjs",
+    "stake:e2e": "node scripts/stake-flow-e2e.mjs",
     "contracts:test": "forge test --root contracts -vv",
     "room:test": "bash scripts/two-peer-test.sh"
   },
@@ -24,5 +25,8 @@
     "ethers": "^6.17.0",
     "hyperswarm": "^4.11.0",
     "protomux": "^3.10.0"
+  },
+  "devDependencies": {
+    "@hyperswarm/testnet": "^3.1.4"
   }
 }
