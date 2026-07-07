@@ -1,0 +1,19 @@
+{
+  "name": "terrace",
+  "description": "Terrace — a serverless World Cup watch-party room (Phase 1: Pears P2P core)",
+  "license": "MIT",
+  "main": "harness.js",
+  "pear": {
+    "name": "terrace",
+    "type": "terminal"
+  },
+  "dependencies": {
+    "autobase": "^7.9.0",
+    "b4a": "^1.6.7",
+    "bare-os": "^3.9.3",
+    "compact-encoding": "^2.16.0",
+    "corestore": "^7.4.0",
+    "hyperswarm": "^4.11.0",
+    "protomux": "^3.10.0"
+  }
+}
