@@ -92,9 +92,69 @@ grep '"evt":"state"' /tmp/terrace-guest.log | tail -1
    is written to drop straight into that worker.
 4. **`bare-os` must be installed explicitly** (see Install note above).
 
+## Phase 2a — WDK wallet + non-custodial escrow
+
+Self-custodial staking on a Sepolia escrow contract. Money is NOT yet wired into the
+P2P room (that's Phase 2b) — 2a is verified via scripts.
+
+### Trust model (honest, by design)
+
+- **The pool is non-custodial.** Staked USDt lives in the `TerraceEscrow` contract, never
+  in a host's personal account. Winners pull their own share with `claim()`.
+- **The result is set by a single `reporter` address**, fixed at deploy (the host wallet,
+  or a keeper reading a scores API). **That reporter is the trust boundary.** This is
+  deliberately not a trustless oracle (out of scope), and deliberately not a host-custodied
+  pool (which would defeat the point).
+
+### Pieces
+
+| File | Role |
+|---|---|
+| `contracts/src/TerraceEscrow.sol` | `deposit` / `reportResult` / `claim`. Proportional payout of the whole pool to correct predictors. |
+| `contracts/src/MockUSDt.sol` | 6-decimal test ERC-20, for tests + local anvil only. |
+| `contracts/test/TerraceEscrow.t.sol` | 8 tests: payout math, reporter-only, no double-claim/stake, etc. |
+| `contracts/script/Deploy.s.sol` | Deploy to Sepolia (or any EVM). |
+| `lib/wdk-wallet.mjs` | WDK self-custody helpers: seed → account, balances, contract calls **signed by WDK**. |
+| `scripts/wallet-info.mjs` | Create/load wallet, print address + ETH + USDt balance (Sepolia). |
+| `scripts/escrow-local-e2e.mjs` | Full deposit→report→claim on local anvil via WDK signing. |
+
+WDK versions: `@tetherto/wdk` 1.0.0-beta.13, `@tetherto/wdk-wallet-evm` 1.0.0-beta.15.
+Contract calls go through `account.sendTransaction({ to, value, data })` — genuine WDK
+self-custody signing; ethers is used only as an ABI codec (as WDK does internally).
+
+### Verify 2a
+
+```sh
+# 1) contract logic (8 tests)
+npm run contracts:test
+
+# 2) full deposit -> report -> claim through WDK signing, on a throwaway local chain
+anvil &                       # in another terminal (or backgrounded)
+npm run escrow:e2e            # prints balances before/after; ends with PASS
+
+# 3) wallet + live Sepolia balance read
+npm run wallet:info           # generates .env with a fresh seed on first run
+```
+
+Why local anvil for the E2E: the on-chain flow needs a funded staker (Sepolia ETH for gas
++ test USDt), and Sepolia funding depends on faucets a script can't drive. anvil proves the
+exact same contract + WDK code path deterministically and for free.
+
+### Deploy to Sepolia (needs faucet funds)
+
+```sh
+cp .env.example .env          # fill PRIVATE_KEY (funded deployer), keep .env gitignored
+forge script contracts/script/Deploy.s.sol:Deploy --root contracts \
+  --rpc-url "$SEPOLIA_RPC_URL" --broadcast
+```
+
+Deployer needs Sepolia ETH (faucet). Stakers need test USDt (Pimlico/Candide faucet) sent
+to their WDK address from `wallet:info`. USDt (Sepolia): `0xd077a400968890eacc75cdc901f0356c943e4fdb`.
+Gasless (ERC-4337 / Pimlico) is a noted follow-up, intentionally deferred so it doesn't
+block this checkpoint.
+
 ## Not yet built (later phases — do not assume present)
 
-- Phase 2: WDK wallet + Sepolia escrow (real staking/payouts).
+- Phase 2b: wire staking into the room (a stake becomes an Autobase event; payout status in shared state).
 - Phase 3: QVAC on-device chat translation.
-- A desktop GUI shell around `lib/room.js` (the P2P core is verified via the terminal
-  harness above; the GUI wrapper is the next step).
+- A desktop GUI shell around `lib/room.js`.
