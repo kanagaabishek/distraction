@@ -1,18 +1,27 @@
 {
   "name": "terrace",
-  "description": "Terrace — a serverless World Cup watch-party room (Phase 1: Pears P2P core)",
+  "description": "Terrace — a serverless World Cup watch-party room (Pears P2P + WDK escrow)",
   "license": "MIT",
   "main": "harness.js",
   "pear": {
     "name": "terrace",
     "type": "terminal"
   },
+  "scripts": {
+    "wallet:info": "node scripts/wallet-info.mjs",
+    "escrow:e2e": "node scripts/escrow-local-e2e.mjs",
+    "contracts:test": "forge test --root contracts -vv",
+    "room:test": "bash scripts/two-peer-test.sh"
+  },
   "dependencies": {
+    "@tetherto/wdk": "^1.0.0-beta.13",
+    "@tetherto/wdk-wallet-evm": "^1.0.0-beta.15",
     "autobase": "^7.9.0",
     "b4a": "^1.6.7",
     "bare-os": "^3.9.3",
     "compact-encoding": "^2.16.0",
     "corestore": "^7.4.0",
+    "ethers": "^6.17.0",
     "hyperswarm": "^4.11.0",
     "protomux": "^3.10.0"
   }

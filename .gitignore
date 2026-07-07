@@ -1,7 +1,13 @@
 node_modules/
 .env
 .env.*
+!.env.example
 *.log
+
+# Foundry (forge-std under contracts/lib is vendored so the repo builds on clone)
+contracts/out/
+contracts/cache/
+contracts/broadcast/
 .pear/
 corestore/
 store/
