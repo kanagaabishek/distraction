@@ -1,0 +1,12 @@
+{
+  "name": "terrace-desktop",
+  "private": true,
+  "description": "Terrace desktop shell (Electron) around the assembled P2P + WDK + QVAC core",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.2.1"
+  }
+}

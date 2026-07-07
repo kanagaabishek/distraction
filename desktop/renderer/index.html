@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Terrace</title>
+  <style>
+    :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3; --mut:#8b949e; --acc:#2ea043; --accd:#238636; --warn:#d29922; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--fg); }
+    header { display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid var(--line); }
+    header h1 { font-size:18px; margin:0; letter-spacing:.5px; }
+    header .tag { color:var(--mut); font-size:12px; }
+    #status { margin-left:auto; color:var(--mut); font-size:12px; max-width:44ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .wrap { padding:18px; display:grid; gap:16px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+    .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:0 0 10px; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    input, select, button { font:inherit; }
+    input, select { background:#0d1117; border:1px solid var(--line); color:var(--fg); border-radius:7px; padding:8px 10px; }
+    input { min-width:120px; } input.grow { flex:1; }
+    button { background:var(--accd); color:#fff; border:0; border-radius:7px; padding:8px 14px; cursor:pointer; }
+    button:hover { background:var(--acc); } button.ghost { background:#21262d; } button.ghost:hover { background:#30363d; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
+    .mut { color:var(--mut); } .pill { font-size:11px; padding:2px 8px; border-radius:20px; border:1px solid var(--line); }
+    .pill.pending { color:var(--warn); border-color:var(--warn); } .pill.confirmed { color:var(--acc); border-color:var(--acc); }
+    .pill.won { background:var(--accd); color:#fff; } .pill.lost { color:var(--mut); }
+    table { width:100%; border-collapse:collapse; font-size:13px; } th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+    #chat { height:220px; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+    .msg { border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+    .msg .who { font-size:11px; color:var(--mut); } .msg .tr { font-size:15px; } .msg .orig { font-size:11px; color:var(--mut); margin-top:3px; }
+    .hidden { display:none; }
+    .invite { word-break:break-all; }
+    .big { font-size:22px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🍐 Terrace</h1>
+    <span class="tag">serverless watch-party · group-tip pool · on-device translation</span>
+    <span id="status">booting…</span>
+  </header>
+
+  <!-- LOBBY -->
+  <div id="lobby" class="wrap">
+    <div class="panel">
+      <h2>Join the watch-party</h2>
+      <div class="row">
+        <input id="name" placeholder="your name" value="Alice" />
+        <label class="mut">read in</label>
+        <select id="lang">
+          <option value="en">English</option>
+          <option value="fr" selected>French</option>
+          <option value="es">Spanish</option>
+          <option value="de">German</option>
+          <option value="it">Italian</option>
+        </select>
+        <button id="createBtn">Create room</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <input id="inviteIn" class="grow" placeholder="paste an invite to join…" />
+        <button id="joinBtn" class="ghost">Join</button>
+      </div>
+      <p class="mut" style="font-size:12px">Local dev mode: a throwaway chain (anvil) + pool are set up automatically, and your wallet is funded with test USDt.</p>
+    </div>
+  </div>
+
+  <!-- ROOM -->
+  <div id="room" class="wrap hidden">
+    <div class="grid2">
+      <div class="panel">
+        <h2>Room invite — share to let friends join</h2>
+        <div class="row"><span id="invite" class="mono invite mut" style="flex:1"></span><button id="copyBtn" class="ghost">Copy</button></div>
+      </div>
+      <div class="panel">
+        <h2>Your wallet (self-custody)</h2>
+        <div class="mono" id="addr">—</div>
+        <div class="row" style="margin-top:6px"><span class="big" id="usdt">0</span><span class="mut">USDt</span><span class="mut" id="eth" style="margin-left:auto"></span></div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h2>Predict & chip into the group-tip pool — <span id="matchName" class="mut"></span></h2>
+        <div class="row">
+          <select id="outcome"><option value="1">Home win</option><option value="2">Away win</option><option value="3">Draw</option></select>
+          <input id="pick" placeholder="your call e.g. 2-1" style="width:120px" />
+          <input id="amount" type="number" min="1" value="100" style="width:90px" /><span class="mut">USDt</span>
+          <button id="predictBtn" class="ghost">Lock prediction</button>
+          <button id="stakeBtn">Chip in</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button id="reportBtn" class="ghost">Report result (reporter only)</button>
+          <select id="reportOutcome"><option value="1">Home won</option><option value="2">Away won</option><option value="3">Draw</option></select>
+          <button id="claimBtn">Claim winnings</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Scoreboard & result</h2>
+        <div class="big" id="score">—</div>
+        <div id="result" class="mut" style="margin-top:6px"></div>
+        <div class="row" style="margin-top:10px"><input id="home" type="number" value="1" style="width:70px" /> : <input id="away" type="number" value="0" style="width:70px" /><button id="scoreBtn" class="ghost">Post score</button></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>The pool</h2>
+      <table id="stakes"><thead><tr><th>Fan</th><th>Pick</th><th>Amount</th><th>Status</th><th>Result</th><th>Claim</th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <div class="panel">
+      <h2>Chat — read in <select id="langLive" style="padding:2px 6px"><option value="en">English</option><option value="fr">French</option><option value="es">Spanish</option><option value="de">German</option><option value="it">Italian</option></select> (translated on your device)</h2>
+      <div id="chat"></div>
+      <div class="row" style="margin-top:10px"><input id="chatIn" class="grow" placeholder="say something (sent in English, the room's canonical language)…" /><button id="chatBtn">Send</button></div>
+    </div>
+  </div>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
