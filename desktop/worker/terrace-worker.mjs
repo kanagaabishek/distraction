@@ -34,6 +34,7 @@ let app = null
 let opts = null // { provider, rpc, escrow, usdt, deployer, dev }
 let match = null // { label, home, away, id, outcome? } — the real fixture this room is on
 let isReporter = false // is THIS wallet the escrow's designated reporter?
+let stateTimer = null // periodic pushState timer (cleared on leave/restart)
 
 async function readReporter (provider, escrow, myAddr) {
   try {
@@ -143,7 +144,8 @@ async function start (msg) {
   try { app.room.onpeer = (n) => log(`[${app.name}] connections=${n}`) } catch { /* */ }
   log(`[${app.name}] mode=${msg.mode} writable=${app.writable} dht=${dhtBootstrap ? JSON.stringify(dhtBootstrap) : 'public'}`)
   app.onupdate = () => { pushState().catch(() => {}) }
-  setInterval(() => pushState().catch(() => {}), 2000)
+  if (stateTimer) clearInterval(stateTimer)
+  stateTimer = setInterval(() => pushState().catch(() => {}), 2000)
 
   send({
     evt: 'ready',
@@ -207,6 +209,18 @@ process.on('message', (m) => {
 // so they agree on it; a new room -> a fresh pool.
 const poolKey = () => `${match?.label || 'match'}#${(app?.key || '').slice(0, 10)}`
 
+// Run an on-chain op with a busy signal (so the UI can block Leave) and graceful handling
+// if the user leaves mid-tx: the tx is already broadcast and the contract settles it on its
+// own; here we just avoid throwing a scary error into a torn-down room.
+async function runTx (fn, doneMsg) {
+  if (!app) return
+  send({ evt: 'busy', busy: true })
+  try { await fn(); if (app && doneMsg) log(doneMsg) }
+  catch (e) { if (app) throw e } // left mid-tx -> swallow the late callback
+  finally { send({ evt: 'busy', busy: false }) }
+  if (app) return pushState()
+}
+
 async function handle (m) {
   switch (m.cmd) {
     case 'start': return start(m)
@@ -216,22 +230,30 @@ async function handle (m) {
     case 'setLang': if (app) { app.translator.target = m.lang; app.lang = m.lang } return pushState()
     case 'stake':
       log(`staking ${m.amount} USDt...`)
-      await app.stake({ matchLabel: poolKey(), prediction: m.prediction, amount: usdt6(m.amount) })
-      log('stake confirmed on-chain'); return pushState()
+      return runTx(() => app.stake({ matchLabel: poolKey(), prediction: m.prediction, amount: usdt6(m.amount) }), 'stake confirmed on-chain')
     case 'report':
-      await app.report({ matchLabel: poolKey(), outcome: m.outcome }); log('result reported'); return pushState()
+      return runTx(() => app.report({ matchLabel: poolKey(), outcome: m.outcome }), 'result reported')
     case 'autoReport': {
       if (!match?.id) return log('no live fixture id to auto-report')
-      log('fetching real result from TheSportsDB…')
-      const r = await getResult(match.id)
-      if (!r?.finished) return log(`match not finished yet (status ${r?.status || '?'})`)
-      await app.report({ matchLabel: poolKey(), outcome: r.outcome })
-      log(`reported REAL result: ${r.home} ${r.homeScore}-${r.awayScore} ${r.away} (${outcomeLabel(r.outcome)})`)
-      return pushState()
+      return runTx(async () => {
+        log('fetching real result from TheSportsDB…')
+        const r = await getResult(match.id)
+        if (!r?.finished) { log(`match not finished yet (status ${r?.status || '?'})`); return }
+        await app.report({ matchLabel: poolKey(), outcome: r.outcome })
+        log(`reported REAL result: ${r.home} ${r.homeScore}-${r.awayScore} ${r.away} (${outcomeLabel(r.outcome)})`)
+      })
     }
     case 'claim':
-      log('claiming...'); await app.claim({ matchLabel: poolKey() }); log('claimed'); return pushState()
+      log('claiming...')
+      return runTx(() => app.claim({ matchLabel: poolKey() }), 'claimed')
     case 'refresh': return pushState()
+    case 'leave': {
+      if (stateTimer) { clearInterval(stateTimer); stateTimer = null }
+      const a = app; app = null; match = null; isReporter = false
+      try { await a?.close() } catch { /* ignore */ }
+      send({ evt: 'left' })
+      return
+    }
     default: return
   }
 }

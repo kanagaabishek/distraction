@@ -50,6 +50,7 @@ $('chatBtn').onclick = () => { const t = $('chatIn').value.trim(); if (t) { send
 $('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('chatBtn').click() })
 $('langLive').onchange = () => send({ cmd: 'setLang', lang: $('langLive').value })
 $('copyBtn').onclick = () => { navigator.clipboard.writeText(invite ? JSON.stringify(invite) : ''); setStatus('full invite copied to clipboard') }
+$('leaveBtn').onclick = () => { setStatus('leaving room…'); send({ cmd: 'leave' }) }
 
 const outName = () => ({ 1: 'Home', 2: 'Away', 3: 'Draw' })[$('outcome').value]
 
@@ -57,6 +58,14 @@ const outName = () => ({ 1: 'Home', 2: 'Away', 3: 'Draw' })[$('outcome').value]
 window.terrace.onEvent((m) => {
   if (m.evt === 'log') { setStatus(m.msg); if (/confirmed|claimed|reported|minted|settle/i.test(m.msg)) showToast(m.msg, 'ok'); return }
   if (m.evt === 'error') { const e = tidyErr(m.msg); setStatus('⚠ ' + e); showToast(e, 'err', 6000); return }
+  if (m.evt === 'busy') { $('leaveBtn').disabled = m.busy; $('leaveBtn').title = m.busy ? 'Finishing a transaction…' : 'Disconnect and return to the lobby'; return }
+  if (m.evt === 'left') {
+    invite = null; reporterAddr = null
+    $('leaveBtn').disabled = false
+    $('room').classList.add('hidden'); $('lobby').classList.remove('hidden')
+    showToast('left the room', 'info'); setStatus('back in the lobby')
+    return
+  }
   if (m.evt === 'ready') {
     invite = m.invite
     if (m.match?.label) MATCH = m.match.label
