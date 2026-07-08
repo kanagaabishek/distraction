@@ -56,8 +56,15 @@
           <option value="de">German</option>
           <option value="it">Italian</option>
         </select>
+        <label class="mut">wallet</label>
+        <select id="acct" title="Each window must use a different wallet to be a separate fan">
+          <option value="0">account[0]</option>
+          <option value="1">account[1]</option>
+          <option value="2">account[2]</option>
+        </select>
         <button id="createBtn">Create room</button>
       </div>
+      <p class="mut" style="font-size:12px;margin:6px 0 0">Two windows on one machine? Pick a <b>different wallet</b> in each (account[0], account[1]) — otherwise you're the same fan and the pool can only hold one stake per wallet.</p>
       <div class="row" style="margin-top:10px">
         <input id="inviteIn" class="grow" placeholder="paste an invite to join…" />
         <button id="joinBtn" class="ghost">Join</button>

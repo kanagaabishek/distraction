@@ -7,15 +7,16 @@ let invite = null
 const setStatus = (s) => { $('status').textContent = s }
 
 // --- lobby actions ---
+const acctIndex = () => Number($('acct').value)
 $('createBtn').onclick = () => {
   setStatus('creating room + local pool…')
-  send({ cmd: 'start', mode: 'create', name: $('name').value || 'Host', lang: $('lang').value })
+  send({ cmd: 'start', mode: 'create', name: $('name').value || 'Host', lang: $('lang').value, accountIndex: acctIndex() })
 }
 $('joinBtn').onclick = () => {
   let inv
   try { inv = JSON.parse($('inviteIn').value.trim()) } catch { return setStatus('invite is not valid JSON') }
   setStatus('joining room…')
-  send({ cmd: 'start', mode: 'join', invite: inv, name: $('name').value || 'Guest', lang: $('lang').value })
+  send({ cmd: 'start', mode: 'join', invite: inv, name: $('name').value || 'Guest', lang: $('lang').value, accountIndex: acctIndex() })
 }
 
 // --- room actions ---
