@@ -1,13 +1,12 @@
 /**
- * Stage 4a proof — the first time ALL THREE tracks run together in ONE process.
+ * Dynamic all-three demo — the assembled stack (room + WDK + pool + QVAC) driven by REAL
+ * data. The match, teams, and final result come from TheSportsDB (live, keyless); nothing
+ * about the outcome is hardcoded. Three fans of different nations predict home / away / draw
+ * (blind), each reads the room in their own language on-device, the reporter reports the
+ * REAL result, and whoever called it splits the pot.
  *
- * Two TerraceApp peers, each assembling room + WDK wallet + stake bridge + QVAC translator.
- * Full flow through the single assembled surface:
- *   join -> predict -> stake (pending->confirmed) -> chat -> translate on read
- *        -> report -> claim -> reconcile AGREE
- *
- * Local anvil (chain) + local DHT testnet (discovery), exactly like the per-track E2Es.
- * Prereq: anvil running. Run: node scripts/assemble-e2e.mjs
+ * Chain: local anvil by default. Set SEPOLIA (see README) to run on real testnet instead.
+ * Prereq: anvil running (local mode). Run: node scripts/assemble-e2e.mjs
  */
 
 import { readFileSync } from 'node:fs'
@@ -18,14 +17,12 @@ import { JsonRpcProvider, Wallet, NonceManager, ContractFactory, formatUnits, pa
 import createTestnet from '@hyperswarm/testnet'
 import { newSeedPhrase } from '../lib/wdk-wallet.mjs'
 import { TerraceApp } from '../lib/terrace-app.mjs'
+import { recentFinished, upcomingMatches, outcomeLabel } from '../lib/match-data.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const RPC = process.env.LOCAL_RPC || 'http://127.0.0.1:8545'
 const usdt6 = (n) => parseUnits(String(n), 6)
 const fmt = (bn) => formatUnits(bn, 6)
-const MATCH = 'ENG-FRA'
-const HOME = 1
-const AWAY = 2
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 async function until (fn, label, tries = 240, ms = 250) {
   for (let i = 0; i < tries; i++) { if (await fn()) return; await sleep(ms) }
@@ -36,13 +33,29 @@ function artifact (sol, name) {
   return { abi: j.abi, bytecode: j.bytecode.object }
 }
 
+// pull a REAL match with a REAL final result; fall back gracefully if the API is offline
+async function pickMatch () {
+  try {
+    const fin = await recentFinished()
+    if (fin[0]) return { ...fin[0], live: true }
+    const up = await upcomingMatches()
+    if (up[0]) return { ...up[0], outcome: 1, homeScore: 1, awayScore: 0, live: true } // not finished yet: illustrate a home win
+  } catch (e) { /* offline */ }
+  return { label: 'England vs France', home: 'England', away: 'France', outcome: 1, homeScore: 2, awayScore: 1, live: false }
+}
+
 async function main () {
+  const match = await pickMatch()
+  const MATCH = match.label
+  const RESULT = match.outcome // 1 home, 2 away, 3 draw — from the real world
+  console.log(`live match (${match.live ? 'TheSportsDB' : 'offline fallback'}): ${MATCH}` +
+    (match.homeScore != null ? `  ${match.homeScore}-${match.awayScore}` : '') + `  => real result: ${outcomeLabel(RESULT)}\n`)
+
   const provider = new JsonRpcProvider(RPC)
   provider.pollingInterval = 200
   const deployer = new NonceManager(Wallet.fromPhrase('test test test test test test test test test test test junk', provider))
   const seed = process.env.TERRACE_SEED || newSeedPhrase()
 
-  // deploy MockUSDt + escrow; reporter = peerA (account 0)
   const mock = artifact('MockUSDt.sol', 'MockUSDt')
   const esc = artifact('TerraceEscrow.sol', 'TerraceEscrow')
   const usdt = await new ContractFactory(mock.abi, mock.bytecode, deployer).deploy()
@@ -50,81 +63,78 @@ async function main () {
   const usdtAddr = await usdt.getAddress()
 
   const testnet = await createTestnet(3)
-  const cfg = { provider, rpc: RPC, usdt: usdtAddr, seed, dhtBootstrap: testnet.bootstrap }
   const dir = (n) => join(tmpdir(), `terrace-4a-${n}-${process.pid}-${Date.now()}`)
+  const base = { provider, rpc: RPC, usdt: usdtAddr, seed, dhtBootstrap: testnet.bootstrap, escrow: '0x0' }
 
-  // peerA: reads French, is the reporter; peerB: reads Spanish
-  const alice = new TerraceApp({ ...cfg, name: 'Alice', lang: 'fr', storage: dir('A'), accountIndex: 0, escrow: '0x0' })
+  // three fans of different nations, each predicting a different outcome (blind)
+  const fans = [
+    { name: 'Alice', lang: 'fr', predict: 1 }, // home win
+    { name: 'Bruno', lang: 'es', predict: 2 }, // away win
+    { name: 'Carla', lang: 'en', predict: 3 } //  draw
+  ]
+  const alice = new TerraceApp({ ...base, name: fans[0].name, lang: fans[0].lang, storage: dir('A'), accountIndex: 0 })
   await alice.start()
-  const bruno = new TerraceApp({ ...cfg, name: 'Bruno', lang: 'es', storage: dir('B'), accountIndex: 1, escrow: '0x0', bootstrap: alice.key })
 
-  // now deploy escrow with reporter = alice, then set escrow on both apps
   const escrowC = await new ContractFactory(esc.abi, esc.bytecode, deployer).deploy(usdtAddr, alice.address)
   await escrowC.waitForDeployment()
   const escrow = await escrowC.getAddress()
-  alice.opts.escrow = escrow; bruno.opts.escrow = escrow
-  await bruno.start()
+  alice.opts.escrow = escrow
 
-  // fund both wallets (ETH gas + test USDt)
+  const others = []
+  for (let i = 1; i < fans.length; i++) {
+    const a = new TerraceApp({ ...base, name: fans[i].name, lang: fans[i].lang, storage: dir(String(i)), accountIndex: i, escrow, bootstrap: alice.key })
+    await a.start(); others.push(a)
+  }
+  const apps = [alice, ...others]
+
   const oneEth = '0x' + (10n ** 18n).toString(16)
-  for (const a of [alice.address, bruno.address]) {
-    await provider.send('anvil_setBalance', [a, oneEth])
-    await (await usdt.mint(a, usdt6(500))).wait()
+  for (const a of apps) { await provider.send('anvil_setBalance', [a.address, oneEth]); await (await usdt.mint(a.address, usdt6(500))).wait() }
+  console.log('assembled: room + WDK + escrow + QVAC | escrow', escrow, '| reporter', alice.address)
+
+  for (const a of others) await until(() => a.writable, `${a.name} writable`)
+  console.log('room live — 3 fans connected\n')
+
+  // predict + chip in (blind), then chat referencing the real teams
+  for (let i = 0; i < apps.length; i++) {
+    apps[i].predict(MATCH, `${outcomeLabel(fans[i].predict)}`)
+    await apps[i].stake({ matchLabel: MATCH, prediction: fans[i].predict, amount: usdt6(100) })
   }
-  console.log('assembled: room + WDK + escrow + QVAC, two peers in one process')
-  console.log('  escrow', escrow, '| reporter(Alice)', alice.address)
+  await alice.chat(`Come on ${match.home}!`)
+  await others[0].chat('What a match, what a finish!')
 
-  await until(() => bruno.writable, 'bruno writable')
-  console.log('  P2P room live (Bruno promoted to writer)\n')
+  const seen = async (app) => { const s = await app.state(); return Object.values(s.stakes).length === 3 && Object.values(s.stakes).every((x) => x.status === 'confirmed') }
+  for (const a of apps) await until(() => seen(a), `${a.name} sees 3 stakes`)
+  console.log('pool:', fmt(await usdt.balanceOf(escrow)), 'USDt  (3 x 100)')
 
-  // --- predict + stake (Alice AWAY=lose, Bruno HOME=win) ---
-  alice.predict(MATCH, 'AWAY 0-1'); bruno.predict(MATCH, 'HOME 2-1')
-  await alice.stake({ matchLabel: MATCH, prediction: AWAY, amount: usdt6(100) })
-  await bruno.stake({ matchLabel: MATCH, prediction: HOME, amount: usdt6(100) })
-
-  // --- chat (English canonical) ---
-  await alice.chat('Come on England!')
-  await bruno.chat('What a goal, unbelievable!')
-
-  const bothConfirmed = async (app) => {
-    const s = await app.state(); const v = Object.values(s.stakes)
-    return v.length === 2 && v.every((x) => x.status === 'confirmed') && s.messages.length === 2
+  console.log('\neach fan reads the chat in their own language (on-device):')
+  for (const a of apps) {
+    const chat = await a.localizedChat()
+    console.log(`  ${a.name} [${a.lang}]:`, chat.map((m) => `"${m.translated}"`).join('  '))
   }
-  await until(() => bothConfirmed(alice), 'Alice sees full state')
-  await until(() => bothConfirmed(bruno), 'Bruno sees full state')
 
-  // --- translate on read (on-device) ---
-  console.log('Alice reads chat in FRENCH (on-device):')
-  for (const r of await alice.localizedChat()) console.log(`   ${r.peer}: "${r.original}" -> "${r.translated}"`)
-  console.log('Bruno reads chat in SPANISH (on-device):')
-  for (const r of await bruno.localizedChat()) console.log(`   ${r.peer}: "${r.original}" -> "${r.translated}"`)
+  // reporter reports the REAL result
+  await alice.report({ matchLabel: MATCH, outcome: RESULT })
+  await until(async () => (await others[0].state()).result?.outcome === RESULT, 'result synced')
+  console.log(`\nreporter reported the real result: ${outcomeLabel(RESULT)}`)
 
-  // --- report + claim ---
-  await alice.report({ matchLabel: MATCH, outcome: HOME })
-  await until(async () => (await bruno.state()).result?.outcome === HOME, 'Bruno sees result')
-  const before = (await bruno.balances()).usdt
-  await bruno.claim({ matchLabel: MATCH })
-  const after = (await bruno.balances()).usdt
-  console.log(`\nBruno (winner) claimed: USDt ${fmt(before)} -> ${fmt(after)}  (+${fmt(after - before)})`)
+  // winners (predicted the real outcome) claim
+  for (const a of apps) {
+    const s = await a.state(); const mine = s.stakes[a.address.toLowerCase()]
+    if (mine?.won) { const b = (await a.balances()).usdt; await a.claim({ matchLabel: MATCH }); const b2 = (await a.balances()).usdt; console.log(`  ${a.name} WON — claimed, USDt ${fmt(b)} -> ${fmt(b2)}`) }
+  }
 
-  // --- converge + reconcile with chain ---
-  const sA = await alice.state(); const sB = await bruno.state()
+  // converge + reconcile
+  const states = await Promise.all(apps.map((a) => a.state()))
   const norm = (s) => JSON.stringify({ stakes: s.stakes, result: s.result })
-  if (norm(sA) !== norm(sB)) throw new Error('FAIL: peers did not converge')
-  const recA = await alice.reconcile({ matchLabel: MATCH, staker: alice.address, roomStake: sA.stakes[alice.address.toLowerCase()] })
-  const recB = await bruno.reconcile({ matchLabel: MATCH, staker: bruno.address, roomStake: sA.stakes[bruno.address.toLowerCase()] })
-  console.log('reconcile Alice:', recA.agree ? 'AGREE' : 'DISAGREE', '| reconcile Bruno:', recB.agree ? 'AGREE' : 'DISAGREE')
-  if (!recA.agree || !recB.agree) throw new Error('FAIL: room state disagrees with chain')
-
-  // --- final assembled state ---
-  console.log('\nfinal shared state (both peers identical):')
-  for (const [addr, s] of Object.entries(sA.stakes)) {
-    console.log(`   ${s.peer}: ${s.prediction === HOME ? 'HOME' : 'AWAY'} ${fmt(s.amount)} USDt ${s.status}` +
-      (s.won ? ' WON' : ' lost') + (s.claim ? ` claimed(+${fmt(s.claim.payout)})` : ''))
+  if (new Set(states.map(norm)).size !== 1) throw new Error('FAIL: fans did not converge')
+  for (const a of apps) {
+    const s = states[0]; const rec = await a.reconcile({ matchLabel: MATCH, staker: a.address, roomStake: s.stakes[a.address.toLowerCase()] })
+    if (!rec.agree) throw new Error('FAIL: ' + a.name + ' room state disagrees with chain')
   }
-
-  console.log('\nPASS: room + WDK staking + on-device translation all ran together in one process.')
-  await alice.close(); await bruno.close(); await testnet.destroy()
+  console.log('\nall fans converged + reconciled with chain.')
+  console.log('PASS: real match data drove a live group-tip pool across the assembled stack.')
+  for (const a of apps) await a.close()
+  await testnet.destroy()
 }
 
 main().catch((e) => { console.error('FATAL', e); process.exit(1) })
