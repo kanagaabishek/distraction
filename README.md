@@ -166,11 +166,39 @@ peer (the surface the desktop shell wraps). `npm run assemble` / `./start.sh` ru
 peers through the whole flow — predict → chip in → chat → translate on read → report →
 claim → reconcile — in one process, proving the three tracks coexist.
 
+## Live match data
+
+The match, teams, and **final result are real** — pulled from **TheSportsDB** (keyless free
+tier; FIFA World Cup, league 4429) via `lib/match-data.mjs`. Nothing about the outcome is
+hardcoded: fans predict, and the reporter reports the **real** score (in the desktop app,
+the "Auto-report real result" button fetches it live). `./start.sh` picks the latest real
+finished match and lets three fans predict home/away/draw — whoever the real world proved
+right splits the pot. Set `SPORTSDB_KEY` for a Patreon key, or `SPORTSDB_LEAGUE` for another
+competition. Falls back to a fixed match only if the API is unreachable.
+
+## Running on real Sepolia (instead of local test money)
+
+Local dev (default) uses a throwaway anvil chain + a mock token so it runs with zero setup.
+To use **real Sepolia + real test USDt**:
+
+```sh
+cp .env.example .env
+# 1) fund a deployer with Sepolia ETH (faucet), put its key in .env as PRIVATE_KEY
+# 2) set SEPOLIA_RPC_URL (e.g. https://sepolia.drpc.org)
+./start.sh deploy               # deploys TerraceEscrow, prints the address
+# 3) put that address in .env as ESCROW_ADDRESS
+npm run wallet:info             # prints your wallet address
+# 4) send Sepolia test USDt to that address (Pimlico/Candide faucet)
+./start.sh desktop              # now targets Sepolia automatically (SEPOLIA_RPC_URL set)
+```
+
+USDt (Sepolia): `0xd077a400968890eacc75cdc901f0356c943e4fdb`. The deployer needs Sepolia ETH;
+each fan's wallet needs test USDt to chip in. `.env` is gitignored — never commit keys.
+
 ## Honesty notes
 
-- **Local anvil is the autonomous proof.** The on-chain flows are verified on a local chain
-  (deterministic, free). A live-Sepolia run needs faucet-funded wallets; the identical code
-  path runs there once funded.
+- **Local anvil is the default, self-funding proof.** The on-chain flows are verified on a
+  local chain (deterministic, free); the identical code runs on Sepolia once you fund wallets.
 - **The reporter is the trust boundary** (stated above), not a trustless oracle.
 - Terminal harnesses are kept as the regression proof that the core still works.
 
@@ -191,5 +219,6 @@ claim → reconcile — in one process, proving the three tracks coexist.
 - ✅ On-device multi-language translation
 - ✅ Self-custodial group-tip pool (WDK + non-custodial escrow), reconciled with chain
 - ✅ All three assembled + verified together headless
-- ⏳ Desktop (Electron) shell around the assembled core
-- ⏳ Live-Sepolia run of the full pool flow (needs faucet funds)
+- ✅ Live match data (real fixtures + real results from TheSportsDB) driving the pool
+- ✅ Desktop (Electron) shell around the assembled core
+- ⏳ Live-Sepolia run of the full pool flow — code + config ready; needs you to fund wallets (faucets)
