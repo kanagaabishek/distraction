@@ -25,6 +25,12 @@
     .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
     .mut { color:var(--mut); } .pill { font-size:11px; padding:2px 8px; border-radius:20px; border:1px solid var(--line); }
     .hint { color:var(--mut); font-size:11px; margin:6px 0 0; line-height:1.4; }
+    #toasts { position:fixed; top:14px; right:14px; display:flex; flex-direction:column; gap:8px; z-index:1000; max-width:360px; }
+    .toast { padding:10px 14px; border-radius:8px; font-size:13px; color:#fff; box-shadow:0 6px 20px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.12); animation:slidein .18s ease; }
+    .toast.err { background:#7d2029; border-color:#da3633; }
+    .toast.ok { background:#1a5a2a; border-color:#2ea043; }
+    .toast.info { background:#21262d; }
+    @keyframes slidein { from { transform:translateX(20px); opacity:0 } to { transform:none; opacity:1 } }
     .pill.pending { color:var(--warn); border-color:var(--warn); } .pill.confirmed { color:var(--acc); border-color:var(--acc); }
     .pill.won { background:var(--accd); color:#fff; } .pill.lost { color:var(--mut); }
     table { width:100%; border-collapse:collapse; font-size:13px; } th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
@@ -42,6 +48,8 @@
     <span class="tag">serverless watch-party · group-tip pool · on-device translation</span>
     <span id="status">booting…</span>
   </header>
+
+  <div id="toasts"></div>
 
   <!-- LOBBY -->
   <div id="lobby" class="wrap">
@@ -102,20 +110,23 @@
         </div>
         <p class="hint"><b>Lock prediction</b> = post your call to the room (free). <b>Chip in</b> = actually stake USDt into the pool on that call.</p>
         <div class="row" style="margin-top:10px">
-          <button id="autoReportBtn" class="ghost" title="Host only — fetch the real final score and settle the pool">Auto-report real result</button>
-          <button id="reportBtn" class="ghost" title="Host only — settle the pool with the outcome you pick">Report manually</button>
-          <select id="reportOutcome"><option value="1">Home won</option><option value="2">Away won</option><option value="3">Draw</option></select>
           <button id="claimBtn" title="If you predicted right, pull your share of the pool into your wallet">Claim winnings</button>
+          <span class="mut" id="claimHint" style="font-size:12px"></span>
         </div>
-        <p class="hint"><b>Report</b> settles the match and decides winners. Then each winner hits <b>Claim winnings</b> to collect their share.</p>
+        <div class="row" id="reporterControls" style="margin-top:10px">
+          <span class="mut" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">host controls</span>
+          <button id="autoReportBtn" class="ghost" title="Fetch the real final score and settle the pool">Auto-report real result</button>
+          <button id="reportBtn" class="ghost" title="Settle the pool with the outcome you pick">Report manually</button>
+          <select id="reportOutcome"><option value="1">Home won</option><option value="2">Away won</option><option value="3">Draw</option></select>
+        </div>
         <p class="hint" id="reportHint"></p>
       </div>
       <div class="panel">
         <h2>Scoreboard & result</h2>
         <div class="big" id="score">—</div>
         <div id="result" class="mut" style="margin-top:6px"></div>
-        <div class="row" style="margin-top:10px"><input id="home" type="number" placeholder="–" style="width:70px" /> : <input id="away" type="number" placeholder="–" style="width:70px" /><button id="scoreBtn" class="ghost" title="Broadcast a live score to everyone — display only, no money">Post score</button></div>
-        <p class="hint"><b>Post score</b> just shares the live scoreboard with the room. It's for watching along — it does <b>not</b> settle the pool (that's <b>Report</b>).</p>
+        <div class="row" id="postScoreRow" style="margin-top:10px"><span class="mut" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">host</span><input id="home" type="number" placeholder="–" style="width:60px" /> : <input id="away" type="number" placeholder="–" style="width:60px" /><button id="scoreBtn" class="ghost" title="Broadcast a live score to everyone — display only, no money">Post score</button></div>
+        <p class="hint"><b>Post score</b> shares the live scoreboard — display only, it does <b>not</b> settle the pool.</p>
       </div>
     </div>
 

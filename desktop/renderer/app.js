@@ -7,6 +7,19 @@ let reporterAddr = null
 
 const setStatus = (s) => { $('status').textContent = s }
 
+function showToast (msg, type = 'info', ms = 4500) {
+  const el = document.createElement('div')
+  el.className = 'toast ' + type
+  el.textContent = msg
+  $('toasts').appendChild(el)
+  setTimeout(() => { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 300) }, ms)
+}
+function tidyErr (s) {
+  s = String(s)
+  const m = s.match(/reverted:?\s*"?([^"\n(]+)"?/i)
+  return m ? 'Failed: ' + m[1].trim() : s.split('\n')[0].slice(0, 140)
+}
+
 // --- lobby actions ---
 const acctIndex = () => Number($('acct').value)
 $('createBtn').onclick = () => {
@@ -42,8 +55,8 @@ const outName = () => ({ 1: 'Home', 2: 'Away', 3: 'Draw' })[$('outcome').value]
 
 // --- worker events ---
 window.terrace.onEvent((m) => {
-  if (m.evt === 'log') return setStatus(m.msg)
-  if (m.evt === 'error') return setStatus('⚠ ' + m.msg)
+  if (m.evt === 'log') { setStatus(m.msg); if (/confirmed|claimed|reported|minted|settle/i.test(m.msg)) showToast(m.msg, 'ok'); return }
+  if (m.evt === 'error') { const e = tidyErr(m.msg); setStatus('⚠ ' + e); showToast(e, 'err', 6000); return }
   if (m.evt === 'ready') {
     invite = m.invite
     if (m.match?.label) MATCH = m.match.label
@@ -66,16 +79,15 @@ window.terrace.onEvent((m) => {
 
 const matchTitle = (mt) => mt ? `⚽ ${mt.label}${mt.date ? ' · ' + mt.date : ''}${mt.finished ? ` · FT ${mt.homeScore}-${mt.awayScore}` : ''}` : 'match'
 
-// only the escrow's reporter can settle — disable the report buttons for everyone else
+// only the escrow's reporter can settle — HIDE the host controls for everyone else
 function applyReporter (isReporter, reporter) {
   if (reporter) reporterAddr = reporter
   const on = !!isReporter
-  $('autoReportBtn').disabled = !on
-  $('reportBtn').disabled = !on
-  $('reportOutcome').disabled = !on
+  $('reporterControls').style.display = on ? '' : 'none'
+  $('postScoreRow').style.display = on ? '' : 'none'
   $('reportHint').textContent = on
-    ? '✓ You are the reporter — you settle this match.'
-    : `Only the reporter${reporterAddr ? ' (' + reporterAddr.slice(0, 8) + '…)' : ''} can settle — do it from that wallet's window.`
+    ? '✓ You are the host — you settle this match and post scores.'
+    : `The host${reporterAddr ? ' (' + reporterAddr.slice(0, 8) + '…)' : ''} settles this match.`
 }
 
 function renderState (s) {
@@ -92,6 +104,18 @@ function renderState (s) {
   $('result').textContent = s.result
     ? `Reported: ${({ 1: 'Home win', 2: 'Away win', 3: 'Draw' })[s.result.outcome]}` + (realFT ? ` (${s.match.homeScore}-${s.match.awayScore})` : '')
     : 'no result yet'
+
+  // contextual claim — only active when THIS wallet has an unclaimed win
+  const mine = s.stakes[(s.address || '').toLowerCase()]
+  const claimed = !!mine?.claim
+  const canClaim = !!(s.result && mine && mine.won && !claimed)
+  $('claimBtn').disabled = !canClaim
+  $('claimBtn').textContent = claimed ? 'Claimed ✓' : 'Claim winnings'
+  $('claimHint').textContent = !mine ? '(you have no stake in this match)'
+    : claimed ? `claimed +${mine.claim.payout} USDt 🎉`
+      : !s.result ? '(available once the match is settled)'
+        : mine.won ? 'you won — claim your share!'
+          : '(no win this time)'
 
   // stakes table
   const tb = $('stakes').querySelector('tbody'); tb.innerHTML = ''

@@ -199,7 +199,7 @@ async function _pushState () {
 }
 
 process.on('message', (m) => {
-  handle(m).catch((e) => send({ evt: 'error', msg: String(e?.stack || e) }))
+  handle(m).catch((e) => send({ evt: 'error', msg: e?.shortMessage || e?.reason || e?.info?.error?.message || e?.message || String(e) }))
 })
 
 async function handle (m) {
