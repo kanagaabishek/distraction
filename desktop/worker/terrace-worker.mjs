@@ -202,6 +202,11 @@ process.on('message', (m) => {
   handle(m).catch((e) => send({ evt: 'error', msg: e?.shortMessage || e?.reason || e?.info?.error?.message || e?.message || String(e) }))
 })
 
+// On-chain match key, scoped to THIS room so a repeat demo on the same fixture doesn't
+// collide ("already reported/staked") with a past room. All peers in a room share app.key,
+// so they agree on it; a new room -> a fresh pool.
+const poolKey = () => `${match?.label || 'match'}#${(app?.key || '').slice(0, 10)}`
+
 async function handle (m) {
   switch (m.cmd) {
     case 'start': return start(m)
@@ -210,22 +215,22 @@ async function handle (m) {
     case 'postScore': app?.postScore(m.matchLabel, m.home, m.away); return pushState()
     case 'setLang': if (app) { app.translator.target = m.lang; app.lang = m.lang } return pushState()
     case 'stake':
-      log(`staking ${m.amount} USDt on ${m.matchLabel}...`)
-      await app.stake({ matchLabel: m.matchLabel, prediction: m.prediction, amount: usdt6(m.amount) })
+      log(`staking ${m.amount} USDt...`)
+      await app.stake({ matchLabel: poolKey(), prediction: m.prediction, amount: usdt6(m.amount) })
       log('stake confirmed on-chain'); return pushState()
     case 'report':
-      await app.report({ matchLabel: m.matchLabel, outcome: m.outcome }); log('result reported'); return pushState()
+      await app.report({ matchLabel: poolKey(), outcome: m.outcome }); log('result reported'); return pushState()
     case 'autoReport': {
       if (!match?.id) return log('no live fixture id to auto-report')
       log('fetching real result from TheSportsDB…')
       const r = await getResult(match.id)
       if (!r?.finished) return log(`match not finished yet (status ${r?.status || '?'})`)
-      await app.report({ matchLabel: m.matchLabel || match.label, outcome: r.outcome })
+      await app.report({ matchLabel: poolKey(), outcome: r.outcome })
       log(`reported REAL result: ${r.home} ${r.homeScore}-${r.awayScore} ${r.away} (${outcomeLabel(r.outcome)})`)
       return pushState()
     }
     case 'claim':
-      log('claiming...'); await app.claim({ matchLabel: m.matchLabel }); log('claimed'); return pushState()
+      log('claiming...'); await app.claim({ matchLabel: poolKey() }); log('claimed'); return pushState()
     case 'refresh': return pushState()
     default: return
   }
