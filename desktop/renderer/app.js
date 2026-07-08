@@ -9,8 +9,10 @@ const setStatus = (s) => { $('status').textContent = s }
 // --- lobby actions ---
 const acctIndex = () => Number($('acct').value)
 $('createBtn').onclick = () => {
-  setStatus('creating room + local pool…')
-  send({ cmd: 'start', mode: 'create', name: $('name').value || 'Host', lang: $('lang').value, accountIndex: acctIndex() })
+  const twoMachines = $('publicNet').checked
+  setStatus(twoMachines ? 'creating room on the public network…' : 'creating room + local pool…')
+  // publicNet ON -> localDiscovery:false -> host skips the local testnet -> public DHT (works across machines)
+  send({ cmd: 'start', mode: 'create', name: $('name').value || 'Host', lang: $('lang').value, accountIndex: acctIndex(), localDiscovery: !twoMachines })
 }
 $('joinBtn').onclick = () => {
   let inv
@@ -25,11 +27,15 @@ $('stakeBtn').onclick = () => send({ cmd: 'stake', matchLabel: MATCH, prediction
 $('reportBtn').onclick = () => send({ cmd: 'report', matchLabel: MATCH, outcome: Number($('reportOutcome').value) })
 $('autoReportBtn').onclick = () => send({ cmd: 'autoReport', matchLabel: MATCH })
 $('claimBtn').onclick = () => send({ cmd: 'claim', matchLabel: MATCH })
-$('scoreBtn').onclick = () => send({ cmd: 'postScore', matchLabel: MATCH, home: Number($('home').value), away: Number($('away').value) })
+$('scoreBtn').onclick = () => {
+  const h = $('home').value, a = $('away').value
+  if (h === '' || a === '') return setStatus('enter a score first')
+  send({ cmd: 'postScore', matchLabel: MATCH, home: Number(h), away: Number(a) })
+}
 $('chatBtn').onclick = () => { const t = $('chatIn').value.trim(); if (t) { send({ cmd: 'chat', text: t }); $('chatIn').value = '' } }
 $('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('chatBtn').click() })
 $('langLive').onchange = () => send({ cmd: 'setLang', lang: $('langLive').value })
-$('copyBtn').onclick = () => { navigator.clipboard.writeText($('invite').textContent) ; setStatus('invite copied') }
+$('copyBtn').onclick = () => { navigator.clipboard.writeText(invite ? JSON.stringify(invite) : ''); setStatus('full invite copied to clipboard') }
 
 const outName = () => ({ 1: 'Home', 2: 'Away', 3: 'Draw' })[$('outcome').value]
 
@@ -41,7 +47,12 @@ window.terrace.onEvent((m) => {
     invite = m.invite
     if (m.match?.label) MATCH = m.match.label
     $('lobby').classList.add('hidden'); $('room').classList.remove('hidden')
-    $('invite').textContent = JSON.stringify(invite)
+    // short human line — the full JSON payload lives in `invite` and is what Copy sends
+    $('invite').textContent = `Room: ${m.match?.label || 'watch-party'} · click “Copy invite” to share`
+    const local = Array.isArray(invite?.dhtBootstrap) && invite.dhtBootstrap.length
+    $('inviteHint').textContent = local
+      ? 'Local discovery (same machine). For two separate machines, re-create with “two machines” checked.'
+      : 'Public network — this invite works for a friend on another machine (they need their own funded wallet).'
     $('addr').textContent = m.address
     $('langLive').value = m.lang
     $('matchName').textContent = matchTitle(m.match) + ' · ' + (m.chain || '')
@@ -58,8 +69,14 @@ function renderState (s) {
   $('addr').textContent = s.address
   $('usdt').textContent = s.balances.usdt
   $('eth').textContent = s.balances.eth + ' ETH'
-  $('score').textContent = s.score ? `${s.score.home} : ${s.score.away}` : '—'
-  $('result').textContent = s.result ? `Reported: ${({ 1: 'Home win', 2: 'Away win', 3: 'Draw' })[s.result.outcome]}` : 'no result yet'
+  // scoreboard: once the result is reported, show the REAL final score; otherwise any
+  // manually-posted live score; otherwise a dash. No phantom default.
+  const realFT = s.result && s.match?.finished && s.match.homeScore != null
+  $('score').textContent = realFT ? `${s.match.homeScore} : ${s.match.awayScore}`
+    : (s.score ? `${s.score.home} : ${s.score.away}` : '—')
+  $('result').textContent = s.result
+    ? `Reported: ${({ 1: 'Home win', 2: 'Away win', 3: 'Draw' })[s.result.outcome]}` + (realFT ? ` (${s.match.homeScore}-${s.match.awayScore})` : '')
+    : 'no result yet'
 
   // stakes table
   const tb = $('stakes').querySelector('tbody'); tb.innerHTML = ''

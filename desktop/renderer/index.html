@@ -63,6 +63,7 @@
           <option value="1">account[1]</option>
           <option value="2">account[2]</option>
         </select>
+        <label class="mut" title="Off = both fans on THIS machine (fast local discovery). On = fans on SEPARATE machines (public DHT)."><input type="checkbox" id="publicNet" /> two machines</label>
         <button id="createBtn">Create room</button>
       </div>
       <p class="mut" style="font-size:12px;margin:6px 0 0">Two windows on one machine? Pick a <b>different wallet</b> in each (account[0], account[1]) — otherwise you're the same fan and the pool can only hold one stake per wallet.</p>
@@ -79,7 +80,8 @@
     <div class="grid2">
       <div class="panel">
         <h2>Room invite — share to let friends join</h2>
-        <div class="row"><span id="invite" class="mono invite mut" style="flex:1"></span><button id="copyBtn" class="ghost">Copy</button></div>
+        <div class="row"><span id="invite" style="flex:1"></span><button id="copyBtn" class="ghost" title="Copies the full invite payload to your clipboard">Copy invite</button></div>
+        <p class="hint" id="inviteHint"></p>
       </div>
       <div class="panel">
         <h2>Your wallet (self-custody)</h2>
@@ -111,7 +113,7 @@
         <h2>Scoreboard & result</h2>
         <div class="big" id="score">—</div>
         <div id="result" class="mut" style="margin-top:6px"></div>
-        <div class="row" style="margin-top:10px"><input id="home" type="number" value="1" style="width:70px" /> : <input id="away" type="number" value="0" style="width:70px" /><button id="scoreBtn" class="ghost" title="Broadcast a live score to everyone — display only, no money">Post score</button></div>
+        <div class="row" style="margin-top:10px"><input id="home" type="number" placeholder="–" style="width:70px" /> : <input id="away" type="number" placeholder="–" style="width:70px" /><button id="scoreBtn" class="ghost" title="Broadcast a live score to everyone — display only, no money">Post score</button></div>
         <p class="hint"><b>Post score</b> just shares the live scoreboard with the room. It's for watching along — it does <b>not</b> settle the pool (that's <b>Report</b>).</p>
       </div>
     </div>
