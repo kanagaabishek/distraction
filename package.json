@@ -8,6 +8,7 @@
     "type": "terminal"
   },
   "scripts": {
+    "start": "node start.mjs",
     "wallet:info": "node scripts/wallet-info.mjs",
     "sepolia:multi": "node scripts/sepolia-multi.mjs",
     "escrow:e2e": "node scripts/escrow-local-e2e.mjs",

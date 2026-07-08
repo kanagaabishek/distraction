@@ -56,14 +56,17 @@ case "$MODE" in
     echo "→ copy the ESCROW_ADDRESS line into .env, then: ./start.sh desktop"
     ;;
   desktop)
-    need forge; need node
-    echo "▶ building contracts…"; forge build --root contracts >/dev/null
+    need node
     export TERRACE_NODE="$(command -v node)"
     if [ -n "${SEPOLIA_RPC_URL:-}" ]; then
+      # Sepolia mode needs NO Foundry/anvil — the escrow is already deployed.
       echo "▶ targeting REAL Sepolia (escrow ${ESCROW_ADDRESS:-<unset!>})"
-      [ -z "${ESCROW_ADDRESS:-}" ] && echo "  ⚠ ESCROW_ADDRESS not set — run ./start.sh deploy first"
+      [ -z "${ESCROW_ADDRESS:-}" ] && echo "  ⚠ ESCROW_ADDRESS not set in .env — set it (or ./start.sh deploy, which needs Foundry)"
     else
-      need anvil; start_anvil
+      # local dev mode deploys a test chain + token, which needs Foundry
+      need forge; need anvil
+      echo "▶ building contracts…"; forge build --root contracts >/dev/null
+      start_anvil
       echo "  (local dev mode: test chain + test USDt, wallet auto-funded)"
     fi
     if [ ! -d desktop/node_modules/electron ]; then

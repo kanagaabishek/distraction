@@ -195,6 +195,31 @@ npm run wallet:info             # prints your wallet address
 USDt (Sepolia): `0xd077a400968890eacc75cdc901f0356c943e4fdb`. The deployer needs Sepolia ETH;
 each fan's wallet needs test USDt to chip in. `.env` is gitignored — never commit keys.
 
+## Windows / any-OS (cross-platform, Sepolia mode)
+
+Sepolia mode needs **only Node ≥ 22.17 + Electron — no Foundry/anvil** (the escrow is
+already deployed). Two ways to launch:
+
+- **Windows (or anywhere):** `npm start` → runs `start.mjs`, which launches the Electron app
+  against Sepolia on any OS (no bash).
+- **macOS/Linux/WSL:** `./start.sh desktop` also works Foundry-free once `SEPOLIA_RPC_URL` is set.
+
+```sh
+npm install
+# .env:
+#   SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+#   ESCROW_ADDRESS=<deployed escrow>
+#   USDT_ADDRESS=<deployed test USDt>
+#   TERRACE_SEED="…"        # npm run wallet:info to generate one, then fund it
+npm start                    # first run installs Electron
+```
+
+Only **local anvil mode** (`./start.sh` with no `SEPOLIA_RPC_URL`) needs Foundry.
+
+> Platform caveat (not tested by us on Windows): QVAC's on-device translation uses a native
+> engine (`@qvac/translation-nmtcpp`) that needs Windows prebuilds. If it doesn't load, chat
+> falls back to the original text and everything else (room, staking, pool) still works.
+
 ## Honesty notes
 
 - **Local anvil is the default, self-funding proof.** The on-chain flows are verified on a
