@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { JsonRpcProvider, Wallet, NonceManager, ContractFactory, parseUnits, formatUnits } from 'ethers'
+import { JsonRpcProvider, Wallet, NonceManager, ContractFactory, Interface, parseUnits, formatUnits } from 'ethers'
 import createTestnet from '@hyperswarm/testnet'
 import { TerraceApp } from '../../lib/terrace-app.mjs'
 import { newSeedPhrase } from '../../lib/wdk-wallet.mjs'
@@ -33,6 +33,16 @@ const fmt = (bn) => formatUnits(bn ?? 0n, 6)
 let app = null
 let opts = null // { provider, rpc, escrow, usdt, deployer, dev }
 let match = null // { label, home, away, id, outcome? } — the real fixture this room is on
+let isReporter = false // is THIS wallet the escrow's designated reporter?
+
+async function readReporter (provider, escrow, myAddr) {
+  try {
+    const iface = new Interface(['function reporter() view returns (address)'])
+    const raw = await provider.call({ to: escrow, data: iface.encodeFunctionData('reporter', []) })
+    const rep = iface.decodeFunctionResult('reporter', raw)[0]
+    return { reporter: rep, isReporter: rep.toLowerCase() === myAddr.toLowerCase() }
+  } catch { return { reporter: null, isReporter: false } }
+}
 
 async function pickMatch () {
   try {
@@ -125,6 +135,11 @@ async function start (msg) {
     opts = { provider, rpc, escrow: app.opts.escrow, usdt: app.opts.usdt, dev }
   }
 
+  // who can settle this pool? (the escrow's reporter, fixed at deploy)
+  const rep = await readReporter(provider, app.opts.escrow, app.address)
+  isReporter = rep.isReporter
+  if (!isReporter && rep.reporter) log(`only the reporter (${rep.reporter.slice(0, 8)}…) can settle this pool`)
+
   try { app.room.onpeer = (n) => log(`[${app.name}] connections=${n}`) } catch { /* */ }
   log(`[${app.name}] mode=${msg.mode} writable=${app.writable} dht=${dhtBootstrap ? JSON.stringify(dhtBootstrap) : 'public'}`)
   app.onupdate = () => { pushState().catch(() => {}) }
@@ -136,6 +151,8 @@ async function start (msg) {
     address: app.address,
     lang: app.lang,
     match,
+    isReporter,
+    reporter: rep.reporter,
     chain: dev ? 'local anvil (test money)' : 'Sepolia testnet',
     invite: { roomKey: app.key, escrow: app.opts.escrow, usdt: app.opts.usdt, dhtBootstrap, match }
   })
@@ -169,6 +186,7 @@ async function _pushState () {
     writable: app.writable,
     roomKey: app.key,
     match,
+    isReporter,
     address: app.address,
     lang: app.lang,
     balances: bal,

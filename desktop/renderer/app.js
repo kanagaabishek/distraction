@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id)
 const send = (msg) => window.terrace.send(msg)
 let MATCH = 'ENG-FRA' // replaced by the real fixture label once the worker reports it
 let invite = null
+let reporterAddr = null
 
 const setStatus = (s) => { $('status').textContent = s }
 
@@ -56,6 +57,7 @@ window.terrace.onEvent((m) => {
     $('addr').textContent = m.address
     $('langLive').value = m.lang
     $('matchName').textContent = matchTitle(m.match) + ' · ' + (m.chain || '')
+    applyReporter(m.isReporter, m.reporter)
     setStatus('in room as ' + m.name)
     return
   }
@@ -64,8 +66,21 @@ window.terrace.onEvent((m) => {
 
 const matchTitle = (mt) => mt ? `⚽ ${mt.label}${mt.date ? ' · ' + mt.date : ''}${mt.finished ? ` · FT ${mt.homeScore}-${mt.awayScore}` : ''}` : 'match'
 
+// only the escrow's reporter can settle — disable the report buttons for everyone else
+function applyReporter (isReporter, reporter) {
+  if (reporter) reporterAddr = reporter
+  const on = !!isReporter
+  $('autoReportBtn').disabled = !on
+  $('reportBtn').disabled = !on
+  $('reportOutcome').disabled = !on
+  $('reportHint').textContent = on
+    ? '✓ You are the reporter — you settle this match.'
+    : `Only the reporter${reporterAddr ? ' (' + reporterAddr.slice(0, 8) + '…)' : ''} can settle — do it from that wallet's window.`
+}
+
 function renderState (s) {
   if (s.match?.label) { MATCH = s.match.label; $('matchName').textContent = matchTitle(s.match) }
+  applyReporter(s.isReporter, s.reporter)
   $('addr').textContent = s.address
   $('usdt').textContent = s.balances.usdt
   $('eth').textContent = s.balances.eth + ' ETH'
