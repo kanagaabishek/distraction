@@ -22,6 +22,7 @@ import { JsonRpcProvider, Wallet, NonceManager, ContractFactory, parseUnits, for
 import createTestnet from '@hyperswarm/testnet'
 import { TerraceApp } from '../../lib/terrace-app.mjs'
 import { newSeedPhrase } from '../../lib/wdk-wallet.mjs'
+import { recentFinished, upcomingMatches, getResult, outcomeLabel } from '../../lib/match-data.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const send = (m) => { try { process.send?.(m) } catch { /* parent gone */ } }
@@ -31,6 +32,17 @@ const fmt = (bn) => formatUnits(bn ?? 0n, 6)
 
 let app = null
 let opts = null // { provider, rpc, escrow, usdt, deployer, dev }
+let match = null // { label, home, away, id, outcome? } — the real fixture this room is on
+
+async function pickMatch () {
+  try {
+    const fin = await recentFinished()
+    if (fin[0]) return fin[0]
+    const up = await upcomingMatches()
+    if (up[0]) return up[0]
+  } catch { /* offline */ }
+  return { label: 'England vs France', home: 'England', away: 'France', id: null, finished: false, outcome: null }
+}
 
 function artifact (sol, name) {
   const j = JSON.parse(readFileSync(join(__dirname, '..', '..', 'contracts', 'out', sol, name + '.json'), 'utf8'))
@@ -63,11 +75,13 @@ async function fundWallet (provider, deployer, usdtAddr, addr) {
 }
 
 async function start (msg) {
-  const rpc = msg.rpc || process.env.LOCAL_RPC || 'http://127.0.0.1:8545'
+  // Chain target: local anvil by default; if SEPOLIA_RPC_URL is set, target real testnet
+  // (no auto-deploy/fund — the pool + wallet must already be funded there).
+  const rpc = msg.rpc || process.env.SEPOLIA_RPC_URL || process.env.LOCAL_RPC || 'http://127.0.0.1:8545'
   const provider = new JsonRpcProvider(rpc)
   provider.pollingInterval = 250
   const seed = process.env.TERRACE_SEED || newSeedPhrase()
-  const dev = msg.dev !== false // default: local dev mode (deploy+fund on anvil)
+  const dev = msg.dev !== undefined ? msg.dev : !process.env.SEPOLIA_RPC_URL
 
   // invite (for join) carries the escrow + token + local DHT bootstrap so both peers use
   // the same pool and discover each other deterministically (host runs the local testnet;
@@ -81,6 +95,9 @@ async function start (msg) {
     dhtBootstrap = testnet.bootstrap
   }
 
+  // the real fixture this room is playing on (host picks it; joiner inherits it via invite)
+  match = msg.mode === 'join' ? (invite?.match || await pickMatch()) : await pickMatch()
+
   // We need the wallet address before deploying (reporter = creator). Build the app first
   // with placeholder pool addresses, then fill them in before any on-chain action.
   app = new TerraceApp({
@@ -93,8 +110,8 @@ async function start (msg) {
     rpc,
     seed,
     accountIndex: msg.accountIndex ?? 0,
-    escrow: invite?.escrow || msg.escrow || '0x0000000000000000000000000000000000000000',
-    usdt: invite?.usdt || msg.usdt || '0x0000000000000000000000000000000000000000'
+    escrow: invite?.escrow || msg.escrow || process.env.ESCROW_ADDRESS || '0x0000000000000000000000000000000000000000',
+    usdt: invite?.usdt || msg.usdt || process.env.USDT_ADDRESS || '0x0000000000000000000000000000000000000000'
   })
   await app.start()
 
@@ -118,7 +135,9 @@ async function start (msg) {
     name: app.name,
     address: app.address,
     lang: app.lang,
-    invite: { roomKey: app.key, escrow: app.opts.escrow, usdt: app.opts.usdt, dhtBootstrap }
+    match,
+    chain: dev ? 'local anvil (test money)' : 'Sepolia testnet',
+    invite: { roomKey: app.key, escrow: app.opts.escrow, usdt: app.opts.usdt, dhtBootstrap, match }
   })
   await pushState()
 }
@@ -149,6 +168,7 @@ async function _pushState () {
     evt: 'state',
     writable: app.writable,
     roomKey: app.key,
+    match,
     address: app.address,
     lang: app.lang,
     balances: bal,
@@ -177,6 +197,15 @@ async function handle (m) {
       log('stake confirmed on-chain'); return pushState()
     case 'report':
       await app.report({ matchLabel: m.matchLabel, outcome: m.outcome }); log('result reported'); return pushState()
+    case 'autoReport': {
+      if (!match?.id) return log('no live fixture id to auto-report')
+      log('fetching real result from TheSportsDB…')
+      const r = await getResult(match.id)
+      if (!r?.finished) return log(`match not finished yet (status ${r?.status || '?'})`)
+      await app.report({ matchLabel: m.matchLabel || match.label, outcome: r.outcome })
+      log(`reported REAL result: ${r.home} ${r.homeScore}-${r.awayScore} ${r.away} (${outcomeLabel(r.outcome)})`)
+      return pushState()
+    }
     case 'claim':
       log('claiming...'); await app.claim({ matchLabel: m.matchLabel }); log('claimed'); return pushState()
     case 'refresh': return pushState()

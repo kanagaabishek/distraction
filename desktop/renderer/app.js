@@ -1,7 +1,7 @@
 // Renderer logic — talks to the worker only through window.terrace (preload bridge).
 const $ = (id) => document.getElementById(id)
 const send = (msg) => window.terrace.send(msg)
-const MATCH = 'ENG-FRA'
+let MATCH = 'ENG-FRA' // replaced by the real fixture label once the worker reports it
 let invite = null
 
 const setStatus = (s) => { $('status').textContent = s }
@@ -22,6 +22,7 @@ $('joinBtn').onclick = () => {
 $('predictBtn').onclick = () => send({ cmd: 'predict', matchLabel: MATCH, pick: `${outName()} ${$('pick').value}`.trim() })
 $('stakeBtn').onclick = () => send({ cmd: 'stake', matchLabel: MATCH, prediction: Number($('outcome').value), amount: Number($('amount').value) })
 $('reportBtn').onclick = () => send({ cmd: 'report', matchLabel: MATCH, outcome: Number($('reportOutcome').value) })
+$('autoReportBtn').onclick = () => send({ cmd: 'autoReport', matchLabel: MATCH })
 $('claimBtn').onclick = () => send({ cmd: 'claim', matchLabel: MATCH })
 $('scoreBtn').onclick = () => send({ cmd: 'postScore', matchLabel: MATCH, home: Number($('home').value), away: Number($('away').value) })
 $('chatBtn').onclick = () => { const t = $('chatIn').value.trim(); if (t) { send({ cmd: 'chat', text: t }); $('chatIn').value = '' } }
@@ -37,18 +38,22 @@ window.terrace.onEvent((m) => {
   if (m.evt === 'error') return setStatus('⚠ ' + m.msg)
   if (m.evt === 'ready') {
     invite = m.invite
+    if (m.match?.label) MATCH = m.match.label
     $('lobby').classList.add('hidden'); $('room').classList.remove('hidden')
     $('invite').textContent = JSON.stringify(invite)
     $('addr').textContent = m.address
     $('langLive').value = m.lang
-    $('matchName').textContent = MATCH
+    $('matchName').textContent = matchTitle(m.match) + ' · ' + (m.chain || '')
     setStatus('in room as ' + m.name)
     return
   }
   if (m.evt === 'state') return renderState(m)
 })
 
+const matchTitle = (mt) => mt ? `⚽ ${mt.label}${mt.date ? ' · ' + mt.date : ''}${mt.finished ? ` · FT ${mt.homeScore}-${mt.awayScore}` : ''}` : 'match'
+
 function renderState (s) {
+  if (s.match?.label) { MATCH = s.match.label; $('matchName').textContent = matchTitle(s.match) }
   $('addr').textContent = s.address
   $('usdt').textContent = s.balances.usdt
   $('eth').textContent = s.balances.eth + ' ETH'
