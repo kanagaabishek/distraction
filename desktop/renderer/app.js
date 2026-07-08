@@ -117,6 +117,13 @@ function renderState (s) {
   // contextual claim — only active when THIS wallet has an unclaimed win
   const mine = s.stakes[(s.address || '').toLowerCase()]
   const claimed = !!mine?.claim
+
+  // one chip-in per wallet per match: disable Chip in once you've staked (or after settle)
+  const staked = !!mine
+  $('stakeBtn').disabled = staked || !!s.result
+  $('stakeHint').textContent = staked
+    ? `chipped in ${mine.amount} USDt on ${({ 1: 'home', 2: 'away', 3: 'draw' })[mine.prediction] || '?'} (one per match)`
+    : s.result ? 'chip-in closed — match settled' : ''
   const canClaim = !!(s.result && mine && mine.won && !claimed)
   $('claimBtn').disabled = !canClaim
   $('claimBtn').textContent = claimed ? 'Claimed ✓' : 'Claim winnings'

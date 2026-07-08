@@ -228,9 +228,16 @@ async function handle (m) {
     case 'chat': app?.chat(m.text); return pushState()
     case 'postScore': app?.postScore(m.matchLabel, m.home, m.away); return pushState()
     case 'setLang': if (app) { app.translator.target = m.lang; app.lang = m.lang } return pushState()
-    case 'stake':
+    case 'stake': {
+      // guard BEFORE appending the pending record: one chip-in per wallet per match (matches
+      // the contract). Without this, a repeat chip-in writes a phantom pending that then
+      // reverts on-chain ("already staked"), making it look like money moved when it didn't.
+      const st = await app.state()
+      if (st.stakes[(app.address || '').toLowerCase()]) { send({ evt: 'error', msg: 'You already chipped into this pool (one stake per match).' }); return }
+      if (st.result) { send({ evt: 'error', msg: 'This match is already settled — chip-in is closed.' }); return }
       log(`staking ${m.amount} USDt...`)
       return runTx(() => app.stake({ matchLabel: poolKey(), prediction: m.prediction, amount: usdt6(m.amount) }), 'stake confirmed on-chain')
+    }
     case 'report':
       return runTx(() => app.report({ matchLabel: poolKey(), outcome: m.outcome }), 'result reported')
     case 'autoReport': {
