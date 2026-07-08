@@ -2,21 +2,21 @@
 #
 # start.sh — run the Terrace project.
 #
-# Until the desktop shell lands (Phase 4b), "running the project" means booting the full
-# assembled stack headless: a local chain + the room + WDK wallet + escrow + on-device
-# QVAC translation, all in one process, driven end to end. This is the same code the GUI
-# worker will wrap.
-#
-# Usage:
-#   ./start.sh            # run the assembled full-stack demo (default)
+#   ./start.sh            # assembled full-stack demo, driven by REAL match data (default)
+#   ./start.sh desktop    # the Electron desktop app (open twice for two peers)
+#   ./start.sh deploy     # deploy the escrow to Sepolia (reads .env)
 #   ./start.sh room       # just the P2P room two-peer sync (Phase 1, under Pear)
 #   ./start.sh contracts  # just the escrow contract tests
+#
+# Chain: local anvil (test money) by default. Put SEPOLIA_RPC_URL + ESCROW_ADDRESS +
+# USDT_ADDRESS (+ TERRACE_SEED) in .env and `desktop` targets real Sepolia instead.
 #
 set -euo pipefail
 cd "$(dirname "$0")"
 export PATH="$HOME/.foundry/bin:$PATH"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "✖ missing '$1' — see README setup"; exit 1; }; }
+load_env() { [ -f .env ] && set -a && . ./.env && set +a || true; }
 
 wait_for_port() { # host port timeout_s
   local i=0
@@ -26,7 +26,17 @@ wait_for_port() { # host port timeout_s
   done
 }
 
+start_anvil() {
+  echo "▶ starting local chain (anvil)…"
+  pkill -9 -f anvil 2>/dev/null || true
+  anvil --silent > /tmp/terrace-anvil.log 2>&1 &
+  ANVIL_PID=$!
+  trap 'kill -9 $ANVIL_PID 2>/dev/null || true' EXIT
+  wait_for_port 127.0.0.1 8545 30
+}
+
 MODE="${1:-assemble}"
+load_env
 
 case "$MODE" in
   room)
@@ -38,38 +48,38 @@ case "$MODE" in
     echo "▶ escrow contract tests…"
     exec forge test --root contracts -vv
     ;;
+  deploy)
+    need forge; need node
+    forge build --root contracts >/dev/null
+    echo "▶ deploying TerraceEscrow to Sepolia from your WDK wallet (account[0])…"
+    node scripts/deploy-sepolia.mjs
+    echo "→ copy the ESCROW_ADDRESS line into .env, then: ./start.sh desktop"
+    ;;
   desktop)
-    need forge; need node; need anvil
+    need forge; need node
     echo "▶ building contracts…"; forge build --root contracts >/dev/null
-    echo "▶ starting local chain (anvil)…"
-    pkill -9 -f anvil 2>/dev/null || true
-    anvil --silent > /tmp/terrace-anvil.log 2>&1 &
-    ANVIL_PID=$!
-    trap 'kill -9 $ANVIL_PID 2>/dev/null || true' EXIT
-    wait_for_port 127.0.0.1 8545 30
+    export TERRACE_NODE="$(command -v node)"
+    if [ -n "${SEPOLIA_RPC_URL:-}" ]; then
+      echo "▶ targeting REAL Sepolia (escrow ${ESCROW_ADDRESS:-<unset!>})"
+      [ -z "${ESCROW_ADDRESS:-}" ] && echo "  ⚠ ESCROW_ADDRESS not set — run ./start.sh deploy first"
+    else
+      need anvil; start_anvil
+      echo "  (local dev mode: test chain + test USDt, wallet auto-funded)"
+    fi
     if [ ! -d desktop/node_modules/electron ]; then
       echo "▶ installing Electron (first run)…"; ( cd desktop && npm install )
     fi
-    echo "▶ launching the Terrace desktop app… (open a SECOND window with ./start.sh desktop to test two peers)"
-    export TERRACE_NODE="$(command -v node)"
+    echo "▶ launching Terrace… (open a SECOND terminal and run ./start.sh desktop again for a second fan)"
     ( cd desktop && npm start )
     ;;
   assemble)
     need forge; need node; need anvil
-    echo "▶ building contracts…"
-    forge build --root contracts >/dev/null
-
-    echo "▶ starting local chain (anvil)…"
-    pkill -9 -f anvil 2>/dev/null || true
-    anvil --silent > /tmp/terrace-anvil.log 2>&1 &
-    ANVIL_PID=$!
-    trap 'kill -9 $ANVIL_PID 2>/dev/null || true' EXIT
-    wait_for_port 127.0.0.1 8545 30
-
-    echo "▶ running assembled stack: room + WDK + escrow + QVAC (first run downloads NMT models once)…"
+    echo "▶ building contracts…"; forge build --root contracts >/dev/null
+    start_anvil
+    echo "▶ running assembled stack on REAL match data (first run downloads NMT models once)…"
     node scripts/assemble-e2e.mjs
     ;;
   *)
-    echo "usage: ./start.sh [assemble|desktop|room|contracts]"; exit 1
+    echo "usage: ./start.sh [assemble|desktop|deploy|room|contracts]"; exit 1
     ;;
 esac
