@@ -9,6 +9,7 @@
   },
   "scripts": {
     "wallet:info": "node scripts/wallet-info.mjs",
+    "sepolia:multi": "node scripts/sepolia-multi.mjs",
     "escrow:e2e": "node scripts/escrow-local-e2e.mjs",
     "stake:e2e": "node scripts/stake-flow-e2e.mjs",
     "translate:demo": "node scripts/translate-demo.mjs",
