@@ -60,8 +60,8 @@ async function main () {
   guest.send({ cmd: 'predict', matchLabel: MATCH, pick: 'HOME 2-1' })
   host.send({ cmd: 'chat', text: 'Come on England!' })
   guest.send({ cmd: 'chat', text: 'What a goal, unbelievable!' })
-  host.send({ cmd: 'stake', matchLabel: MATCH, prediction: AWAY, amount: 100 })
-  guest.send({ cmd: 'stake', matchLabel: MATCH, prediction: HOME, amount: 100 })
+  host.send({ cmd: 'stake', matchLabel: MATCH, prediction: AWAY, amount: 10 })
+  guest.send({ cmd: 'stake', matchLabel: MATCH, prediction: HOME, amount: 20 })
 
   const twoConfirmed = (s) => Object.values(s.stakes).length === 2 && Object.values(s.stakes).every((x) => x.status === 'confirmed')
   await waitFor(host, twoConfirmed, 'host sees 2 confirmed')
@@ -80,8 +80,8 @@ async function main () {
 
   const sh = host._last; const sg = guest._last
   const norm = (s) => JSON.stringify({ stakes: s.stakes, result: s.result })
-  console.log('\nfinal state (host):')
-  for (const v of Object.values(sh.stakes)) console.log(`   ${v.peer}: ${v.prediction === HOME ? 'HOME' : 'AWAY'} ${v.amount} USDt ${v.status}` + (v.won ? ' WON' : ' lost') + (v.claim ? ` claimed(+${v.claim.payout})` : ''))
+  console.log(`\nfinal pool (host view) — ${Object.keys(sh.stakes).length} distinct stakers:`)
+  for (const v of Object.values(sh.stakes)) console.log(`   ${v.peer} ${v.staker?.slice(0, 8)}: ${v.prediction === HOME ? 'HOME' : 'AWAY'} ${v.amount} USDt ${v.status}` + (v.won ? ' WON' : ' lost') + (v.claim ? ` claimed(+${v.claim.payout})` : ''))
   console.log('guest wallet USDt:', sg.balances.usdt)
 
   if (norm(sh) !== norm(sg)) throw new Error('FAIL: workers did not converge')
