@@ -42,8 +42,9 @@ const waitReady = async (child, label, tries = 200) => {
 }
 
 async function main () {
+  const localDiscovery = process.env.PUBLIC_DHT ? false : true // PUBLIC_DHT=1 tests real public-DHT discovery (two-machine path)
   const host = spawnWorker('host')
-  host.send({ cmd: 'start', mode: 'create', name: 'Alice', lang: 'fr', accountIndex: 0 })
+  host.send({ cmd: 'start', mode: 'create', name: 'Alice', lang: 'fr', accountIndex: 0, localDiscovery })
   const hostReady = await waitReady(host, 'host')
   console.log('host ready:', hostReady.address, '\n  invite roomKey:', hostReady.invite.roomKey.slice(0, 16) + '…', '| escrow:', hostReady.invite.escrow)
 
